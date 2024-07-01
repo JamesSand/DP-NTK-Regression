@@ -1,11 +1,15 @@
-# import torch
+import torch
+
+x = torch.zeros(10)
+print(x)
+
 # from torch.distributions.laplace import Laplace
 
-import numpy as np
+# import numpy as np
 
-exponent_eps_list = [-3.0 + i * 0.2 for i in range(10)]
+# exponent_eps_list = [-3.0 + i * 0.2 for i in range(10)]
 
-print(exponent_eps_list)
+# print(exponent_eps_list)
 
 # x = np.linspace(-3.0, -1.0, num=10)
 # print(x)

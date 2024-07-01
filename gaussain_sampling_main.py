@@ -131,7 +131,6 @@ def add_laplace_on_alpha(cls1_test_ts, cls2_test_ts, alpha, reg_lambda, w_r, x_d
     return final_test_acc, final_train_acc
 
 
-
 if __name__ == "__main__":
 
     # there are 5k images for 1 class

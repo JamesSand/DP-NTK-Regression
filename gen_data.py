@@ -18,8 +18,6 @@ def gen_random_multi_gaussian(mu, sample_num, sigma_scale=1.0):
         loc=mu, covariance_matrix=sigma
     )
 
-    # breakpoint()
-
     # sample_num_torch_size = torch.Size([sample_num])
     # samples: torch.Tensor = sampler.sample(sample_num_torch_size)
     samples: torch.Tensor = sampler.sample((sample_num, ))
