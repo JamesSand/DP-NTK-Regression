@@ -28,13 +28,15 @@ def gen_random_multi_gaussian(mu, sample_num, sigma_scale=1.0):
 
 
 def gen_sanitiy_check_data():
-    sample_num = 100
+    sample_num = 1000
     positive_num = sample_num // 2
     negative_num = sample_num - positive_num
 
+    # positive_mu = torch.tensor([-100, -100, -100], dtype=torch.float32)
     positive_mu = torch.tensor([0, 0, 0], dtype=torch.float32)
 
-    negative_mu = torch.tensor([100, 100, 100], dtype=torch.float32)
+    # negative_mu = torch.tensor([100, 100, 100], dtype=torch.float32)
+    negative_mu = torch.tensor([1000, 1000, 1000], dtype=torch.float32)
 
     positive_samples = gen_random_multi_gaussian(positive_mu, positive_num)
     negative_samples = gen_random_multi_gaussian(negative_mu, negative_num)

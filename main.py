@@ -23,7 +23,7 @@ def gen_h_dis(w_r, x_data):
     inner_wr_xi = w_r @ x_data.t()
 
     # m * n * n
-    inner_wr_xi_inner_wr_xj = torch.empty((m, n, n), dtype=torch.float32)
+    inner_wr_xi_inner_wr_xj = torch.empty((m, n, n), dtype=torch.float32).to(x_data.device)
     
     for iter_m in range(m):
         # n * n = n * 1 @ 1 * n
@@ -49,7 +49,7 @@ def gen_alpha(h_dis, reg_lambda, y_data):
     n = h_dis.shape[0]
 
     # n * n
-    k_plus_lambda = h_dis + reg_lambda * torch.eye(n)
+    k_plus_lambda = h_dis + reg_lambda * torch.eye(n).to(y_data.device)
 
     # n * 1
     alpha = torch.linalg.solve(k_plus_lambda, y_data)
@@ -85,7 +85,7 @@ def gen_z_embed(z, x_data, w_r):
     # 1 * n
     inner_z_xi = z @ x_data.t()
 
-    inner_wr_z_wr_xi = torch.empty((m, nz, n), dtype=torch.float32)
+    inner_wr_z_wr_xi = torch.empty((m, nz, n), dtype=torch.float32).to(x_data.device)
     # breakpoint()
     for iter_m in range(m):
         inner_wr_z_wr_xi[iter_m] = inner_wr_z[iter_m][..., None] @ inner_wr_xi[iter_m][None, ...]
@@ -104,16 +104,31 @@ def gen_z_embed(z, x_data, w_r):
     return z_embed
 
 
+def process_query(z, w_r, x_data, alpha):
+    # z: nz * d
+    # w_r: m * d
+    # x_data: n * d
+    # alpha: n * 1
+    # return: pred: nz * 1
+
+    # nz * n
+    query_embed = gen_z_embed(z, x_data, w_r)
+
+    # nz * 1
+    query_pred = query_embed @ alpha
+
+    query_pred[query_pred >= 0] = 1
+    query_pred[query_pred < 0] = -1
+
+    return query_pred
+
+
 if __name__ == "__main__":
 
-    m = 20
-    reg_lambda = 1.0
+    m = 256
+    reg_lambda = 10.0
 
     positive_data, negative_data = gen_sanitiy_check_data()
-    print(positive_data.shape)
-    print(positive_data[:10])
-    print(negative_data.shape)
-    print(negative_data[:10])
 
     # gen label here
     n, d = positive_data.shape
@@ -121,8 +136,10 @@ if __name__ == "__main__":
     # generate w_r
     w_r = torch.randn((m, d), dtype=torch.float32)
     
-    positive_label = torch.full((n, ), 1, dtype=torch.float32)
-    negative_label = torch.full((n, ), -1, dtype=torch.float32)
+    label_scale = 100.0
+
+    positive_label = torch.full((n, ), label_scale, dtype=torch.float32)
+    negative_label = torch.full((n, ), -label_scale, dtype=torch.float32)
 
     # concate them
     # x_data: 100 * d
@@ -136,27 +153,42 @@ if __name__ == "__main__":
 
     alpha = gen_alpha(h_dis, reg_lambda, y_data)
 
-    # nz * n
-    sanity_query_embed = gen_z_embed(positive_data, x_data, w_r)
 
-    # nz * 1
-    sanity_pred = sanity_query_embed @ alpha
-    
-    # set to 1 and -1
-    sanity_pred[sanity_pred >= 0] = 1
-    sanity_pred[sanity_pred < 0] = -1
+    test_positive_data, test_negative_data = gen_sanitiy_check_data()
 
-    # correct = sanity_pred.sum()
-    count_ones = torch.sum(sanity_pred == 1)
+    # ############### sanity check part 1 start ################
+    # sanity_pred = process_query(positive_data, w_r, x_data, alpha)
+    # succ_cnt = torch.sum(sanity_pred == 1)
+    # nz = sanity_pred.shape[0]
+    # ############### sanity check part 1 end ################
+
+    # ############### sanity check part 1 start ################
+    # sanity_pred = process_query(negative_data, w_r, x_data, alpha)
+    # succ_cnt = torch.sum(sanity_pred == -1)
+    # nz = sanity_pred.shape[0]
+    # ############### sanity check part 1 end ################
+
+    # ############### sanity check part 2 start ################
+    # sanity_pred = process_query(test_positive_data, w_r, x_data, alpha)
+    # succ_cnt = torch.sum(sanity_pred == 1)
+    # nz = sanity_pred.shape[0]
+    # ############### sanity check part 2 end #################
+
+    ############### sanity check part 3 start ################
+    sanity_pred = process_query(test_negative_data, w_r, x_data, alpha)
+    succ_cnt = torch.sum(sanity_pred == -1)
     nz = sanity_pred.shape[0]
+    ############### sanity check part 3 end ################
 
-    accuracy = count_ones / nz
+    accuracy = succ_cnt / nz
 
-    print(sanity_pred)
-    print(accuracy)
+    # print(sanity_pred)
+    print("succ cnt", succ_cnt)
+    print("total cnt", nz)
+    print("accuracy", accuracy)
 
-    breakpoint()
-    print()
+    # breakpoint()
+    # print()
 
 
 
