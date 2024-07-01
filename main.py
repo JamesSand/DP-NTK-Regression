@@ -1,195 +1,168 @@
 import torch
+import torch.nn as nn
+import torchvision.models as models
+import torchvision.transforms as transforms
+from torch.autograd import Variable
+from PIL import Image
+import torchvision
+from torch.utils.data import Subset
+from tqdm import tqdm
 
-from gen_data import gen_random_multi_gaussian, gen_sanitiy_check_data
+from ntk_utils import gen_h_dis, gen_alpha, gen_z_embed, process_query
 
-def gen_h_dis(w_r, x_data):
-    # h^{dis}_{ij} = 1/m sum_r^m <<w_r, x_i> x_i, <w_r, x_j> x_j>
-    # h^{dis}_{ij} = <x_i, x_j> 1/m sum_r^m <w_r, x_i> <w_r, x_j>
-    # where 
-    # <x_i, x_j>: n * n
-    # <w_r, x_i> <w_r, x_j>: m * n * n
-    # 1/m sum_r^m <w_r, x_i> <w_r, x_j>: n * n
-
-    n = x_data.shape[0]
-    m = w_r.shape[0]
-
-    # # generate neurons: m * d shape
-    # w_r = torch.randn((m, d), dtype=torch.float32)
-
-    # n * n
-    inner_xi_xj = x_data @ x_data.t()
-
-    # m * n
-    inner_wr_xi = w_r @ x_data.t()
-
-    # m * n * n
-    inner_wr_xi_inner_wr_xj = torch.empty((m, n, n), dtype=torch.float32).to(x_data.device)
-    
-    for iter_m in range(m):
-        # n * n = n * 1 @ 1 * n
-        inner_wr_xi_inner_wr_xj[iter_m] = inner_wr_xi[iter_m][..., None] @ inner_wr_xi[iter_m][None, ...]
-
-    # n * n
-    avg_inner_wr_xi_inner_wr_xj = inner_wr_xi_inner_wr_xj.mean(dim=0)
-
-    # n * n
-    h_dis = avg_inner_wr_xi_inner_wr_xj * inner_xi_xj
-
-    return h_dis
-
-def gen_alpha(h_dis, reg_lambda, y_data):
-    # h_dis: n * n
-    # reg_lambda: float
-    # y_data: n * 1
-    # return: alpha: n * 1
-
-    # https://pytorch.org/docs/stable/generated/torch.linalg.inv.html
-    # linalg.solve(A, B) == linalg.inv(A) @ B  # When B is a matrix
-
-    n = h_dis.shape[0]
-
-    # n * n
-    k_plus_lambda = h_dis + reg_lambda * torch.eye(n).to(y_data.device)
-
-    # n * 1
-    alpha = torch.linalg.solve(k_plus_lambda, y_data)
-
-    return alpha
+# device =
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def gen_z_embed(z, x_data, w_r):
-    # z: 1 * d
-    # x_data: n * d
-    # w_r: m * d
+# Load the pretrained model
+model = models.resnet18(pretrained=True)
 
-    # 1/m sum_r^m <<w_r, z> z, <w_r, x_i> x_i>
-    # = <z, x_i> 1/m sum_r^m <w_r, z> <w_r, x_i>
-    # where 
-    # <z, x_i>: 1 * n
-    # <w_r, x_i>: m * n
-    # <w_r, z> <w_r, x_i>: m * 1 * n
-    # 1/m sum_r^m <w_r, z> <w_r, x_i>: 1 * n
+model = model.to(device)
 
-    # return: z_embed: 1 * n
+# Use the model object to select the desired layer
+layer = model._modules.get('avgpool')
 
-    m = w_r.shape[0]
-    n = x_data.shape[0]
-    nz = z.shape[0]
+# Set model to evaluation mode
+model.eval()
 
-    # m * n
-    inner_wr_xi = w_r @ x_data.t()
+# Image transforms
+scaler = transforms.Resize((224, 224))
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+to_tensor = transforms.ToTensor()
 
-    # m * 1
-    inner_wr_z = w_r @ z.t()
+def get_vector(img):
+    # 1. Load the image with Pillow library
+    # img = Image.open(image_name)
+    # 2. Create a PyTorch Variable with the transformed image
+    t_img = Variable(normalize(to_tensor(scaler(img))).unsqueeze(0))
+    # 3. Create a vector of zeros that will hold our feature vector
+    #    The 'avgpool' layer has an output size of 512
+    my_embedding = torch.zeros(512).to(device)
+    # 4. Define a function that will copy the output of a layer
+    def copy_data(m, i, o):
+        # my_embedding.copy_(o.data)
+        my_embedding.copy_(o.data.reshape(o.data.size(1)))
+    # 5. Attach that function to our selected layer
+    h = layer.register_forward_hook(copy_data)
+    # 6. Run the model on our transformed image
+    # origin_device = t_img.device
+    t_img = t_img.to(device)
+    model(t_img)
+    # 7. Detach our copy function from the layer
+    h.remove()
 
-    # 1 * n
-    inner_z_xi = z @ x_data.t()
+    return my_embedding
 
-    inner_wr_z_wr_xi = torch.empty((m, nz, n), dtype=torch.float32).to(x_data.device)
-    # breakpoint()
-    for iter_m in range(m):
-        inner_wr_z_wr_xi[iter_m] = inner_wr_z[iter_m][..., None] @ inner_wr_xi[iter_m][None, ...]
-        # try:
-        #     inner_wr_z_wr_xi[iter_m] = inner_wr_z[iter_m][..., None] @ inner_wr_xi[iter_m][None, ...]
-        # except Exception as e:
-        #     print(e)
-        #     breakpoint()
-        #     print()
-
-    # 1 * n
-    avg_inner_wr_z_wr_xi = inner_wr_z_wr_xi.mean(dim=0)
-
-    z_embed = inner_z_xi * avg_inner_wr_z_wr_xi
-
-    return z_embed
+    # my_embedding = my_embedding.to(origin_device)
+    # # 8. Return the feature vector
+    # return my_embedding.numpy()
 
 
-def process_query(z, w_r, x_data, alpha):
-    # z: nz * d
-    # w_r: m * d
-    # x_data: n * d
-    # alpha: n * 1
-    # return: pred: nz * 1
+ds = torchvision.datasets.CIFAR10(root='./data', train=True, download=False)
 
-    # nz * n
-    query_embed = gen_z_embed(z, x_data, w_r)
+cls1_name = "airplane"
+cls2_name = "cat"
 
-    # nz * 1
-    query_pred = query_embed @ alpha
+cls1_indices, cls2_indices, other_indices = [], [], []
+cls1_idx, cls2_idx = ds.class_to_idx[cls1_name], ds.class_to_idx[cls2_name]
 
-    query_pred[query_pred >= 0] = 1
-    query_pred[query_pred < 0] = -1
+for i in range(len(ds)):
+  current_class = ds[i][1]
+  if current_class == cls1_idx:
+    cls1_indices.append(i)
+  elif current_class == cls2_idx:
+    cls2_indices.append(i)
+  else:
+    other_indices.append(i)
 
-    return query_pred
+def gen_feature_tensor(idx_list):
+    img_ts_list = []
+    for idx in tqdm(idx_list):
+        image, label = ds[idx]
+        img_ts = get_vector(image)
+        # img_ts = torch.from_numpy(img_np)
+        img_ts_list.append(img_ts)
 
-
-if __name__ == "__main__":
-
-    m = 256
-    reg_lambda = 10.0
-
-    positive_data, negative_data = gen_sanitiy_check_data()
-
-    # gen label here
-    n, d = positive_data.shape
-
-    # generate w_r
-    w_r = torch.randn((m, d), dtype=torch.float32)
-    
-    label_scale = 100.0
-
-    positive_label = torch.full((n, ), label_scale, dtype=torch.float32)
-    negative_label = torch.full((n, ), -label_scale, dtype=torch.float32)
-
-    # concate them
-    # x_data: 100 * d
-    x_data = torch.cat((positive_data, negative_data), dim=0)
-
-    # 100 * 1
-    y_data = torch.cat((positive_label, negative_label), dim=0)
-
-    # 100 * 100
-    h_dis = gen_h_dis(w_r, x_data)
-
-    alpha = gen_alpha(h_dis, reg_lambda, y_data)
+    # concat
+    ret_ts = torch.stack(img_ts_list, dim=0)
+    return ret_ts
 
 
-    test_positive_data, test_negative_data = gen_sanitiy_check_data()
+# there are 5k images for 1 class
+train_num = 1000
+test_num = 100
+label_scale = 100.0
 
-    # ############### sanity check part 1 start ################
-    # sanity_pred = process_query(positive_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == 1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 1 end ################
+cls1_train_ts = gen_feature_tensor(cls1_indices[:train_num]).to(device)
+cls2_train_ts = gen_feature_tensor(cls2_indices[:train_num]).to(device)
 
-    # ############### sanity check part 1 start ################
-    # sanity_pred = process_query(negative_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == -1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 1 end ################
+cls1_label = torch.full((train_num, ), label_scale, dtype=torch.float32)
+cls2_label = torch.full((train_num, ), -1 * label_scale, dtype=torch.float32)
 
-    # ############### sanity check part 2 start ################
-    # sanity_pred = process_query(test_positive_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == 1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 2 end #################
+cls1_test_ts = gen_feature_tensor(cls1_indices[-test_num:]).to(device)
+cls2_test_ts = gen_feature_tensor(cls2_indices[-test_num:]).to(device)
 
-    ############### sanity check part 3 start ################
-    sanity_pred = process_query(test_negative_data, w_r, x_data, alpha)
-    succ_cnt = torch.sum(sanity_pred == -1)
-    nz = sanity_pred.shape[0]
-    ############### sanity check part 3 end ################
 
+def test_accuracy(test_dataset, gt_label, w_r, x_data, alpha):
+    pred = process_query(test_dataset, w_r, x_data, alpha)
+    succ_cnt = torch.sum(pred == gt_label)
+    nz = pred.shape[0]
     accuracy = succ_cnt / nz
+    # print("accuracy", accuracy)
+    return accuracy
 
-    # print(sanity_pred)
-    print("succ cnt", succ_cnt)
-    print("total cnt", nz)
-    print("accuracy", accuracy)
+############# test on NTK Regression start #################
 
-    # breakpoint()
-    # print()
+m = 256
+reg_lambda = 10.0
 
+x_data = torch.cat((cls1_train_ts, cls2_train_ts), dim=0).to(device)
+y_data = torch.cat((cls1_label, cls2_label), dim=0).to(device)
+
+n, d = x_data.shape
+
+# generate w_r
+w_r = torch.randn((m, d), dtype=torch.float32).to(device)
+
+h_dis = gen_h_dis(w_r, x_data)
+
+alpha = gen_alpha(h_dis, reg_lambda, y_data)
+
+# may scale down alpha here
+alpha = alpha / (n * n)
+
+cls1_accuracy = test_accuracy(cls1_test_ts, 1, w_r, x_data, alpha)
+cls2_accuracy = test_accuracy(cls2_test_ts, -1, w_r, x_data, alpha)
+
+cls1_train_acc = test_accuracy(cls1_train_ts, 1, w_r, x_data, alpha)
+cls2_train_acc = test_accuracy(cls2_train_ts, -1, w_r, x_data, alpha)
+
+final_accuracy = (cls1_accuracy + cls2_accuracy) / 2
+
+print("cls1 test acc", cls1_accuracy)
+print("cls2 test acc", cls2_accuracy)
+print("final test acc", final_accuracy)
+
+print("cls1 train acc", cls1_train_acc)
+print("cls2 train acc", cls2_train_acc)
+
+
+
+# ############### sanity check part 1 start ################
+# sanity_pred = process_query(cls1_train_ts, w_r, x_data, alpha)
+# succ_cnt = torch.sum(sanity_pred == 1)
+# nz = sanity_pred.shape[0]
+# accuracy = succ_cnt / nz
+# print("accuracy", accuracy)
+# breakpoint()
+# ############### sanity check part 1 end ################
+
+############# test on NTK Regression end #################
+
+
+
+# breakpoint()
+# print()
 
 
 
