@@ -1,7 +1,11 @@
 import torch
 
 def gen_random_multi_gaussian(mu, sample_num, sigma_scale=1.0):
-    # mu = torch.FloatTensor([1, 2, 0])
+    # mu: d dimension tensor
+    # sample_num: int
+    # sigma_scale: float
+    # return: sample_num * d
+
     multi_gaussian_dim = mu.shape[0]
     # sigma_scale = 10.0
     # generate diagonal matrix
@@ -13,21 +17,28 @@ def gen_random_multi_gaussian(mu, sample_num, sigma_scale=1.0):
     sampler = torch.distributions.MultivariateNormal(
         loc=mu, covariance_matrix=sigma
     )
+
+    # breakpoint()
+
+    # sample_num_torch_size = torch.Size([sample_num])
+    # samples: torch.Tensor = sampler.sample(sample_num_torch_size)
     samples: torch.Tensor = sampler.sample((sample_num, ))
-    # samples.shape [100000, 3]
 
     return samples
 
-    # print(samples.shape)
 
-    # # estimation of mu and 
-    # new_mu = samples.mean(dim=0)
-    # new_sigma = (samples - mu).T @ (samples - mu) / len(samples)
-    
-    # print(new_mu.round())
-    # print(new_sigma.round())
+def gen_sanitiy_check_data():
+    sample_num = 100
+    positive_num = sample_num // 2
+    negative_num = sample_num - positive_num
 
-    # breakpoint()
-    # print()
+    positive_mu = torch.tensor([0, 0, 0], dtype=torch.float32)
+
+    negative_mu = torch.tensor([100, 100, 100], dtype=torch.float32)
+
+    positive_samples = gen_random_multi_gaussian(positive_mu, positive_num)
+    negative_samples = gen_random_multi_gaussian(negative_mu, negative_num)
+
+    return positive_samples, negative_samples
 
 
