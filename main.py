@@ -7,12 +7,13 @@ from PIL import Image
 import torchvision
 from torch.utils.data import Subset
 from tqdm import tqdm
+from torch.distributions.laplace import Laplace
+
 
 from ntk_utils import gen_h_dis, gen_alpha, gen_z_embed, process_query
 
 # device =
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 # Load the pretrained model
 model = models.resnet18(pretrained=True)
@@ -60,20 +61,20 @@ def get_vector(img):
 
 ds = torchvision.datasets.CIFAR10(root='./data', train=True, download=False)
 
-cls1_name = "airplane"
-cls2_name = "cat"
+def gen_2classes_indices(cls1_name, cls2_name):
+    cls1_indices, cls2_indices, other_indices = [], [], []
+    cls1_idx, cls2_idx = ds.class_to_idx[cls1_name], ds.class_to_idx[cls2_name]
 
-cls1_indices, cls2_indices, other_indices = [], [], []
-cls1_idx, cls2_idx = ds.class_to_idx[cls1_name], ds.class_to_idx[cls2_name]
+    for i in range(len(ds)):
+        current_class = ds[i][1]
+        if current_class == cls1_idx:
+            cls1_indices.append(i)
+        elif current_class == cls2_idx:
+            cls2_indices.append(i)
+        else:
+            other_indices.append(i)
 
-for i in range(len(ds)):
-  current_class = ds[i][1]
-  if current_class == cls1_idx:
-    cls1_indices.append(i)
-  elif current_class == cls2_idx:
-    cls2_indices.append(i)
-  else:
-    other_indices.append(i)
+    return cls1_indices, cls2_indices
 
 def gen_feature_tensor(idx_list):
     img_ts_list = []
@@ -88,21 +89,6 @@ def gen_feature_tensor(idx_list):
     return ret_ts
 
 
-# there are 5k images for 1 class
-train_num = 1000
-test_num = 100
-label_scale = 100.0
-
-cls1_train_ts = gen_feature_tensor(cls1_indices[:train_num]).to(device)
-cls2_train_ts = gen_feature_tensor(cls2_indices[:train_num]).to(device)
-
-cls1_label = torch.full((train_num, ), label_scale, dtype=torch.float32)
-cls2_label = torch.full((train_num, ), -1 * label_scale, dtype=torch.float32)
-
-cls1_test_ts = gen_feature_tensor(cls1_indices[-test_num:]).to(device)
-cls2_test_ts = gen_feature_tensor(cls2_indices[-test_num:]).to(device)
-
-
 def test_accuracy(test_dataset, gt_label, w_r, x_data, alpha):
     pred = process_query(test_dataset, w_r, x_data, alpha)
     succ_cnt = torch.sum(pred == gt_label)
@@ -111,58 +97,109 @@ def test_accuracy(test_dataset, gt_label, w_r, x_data, alpha):
     # print("accuracy", accuracy)
     return accuracy
 
-############# test on NTK Regression start #################
 
-m = 256
-reg_lambda = 10.0
+def add_laplace_on_alpha(cls1_test_ts, cls2_test_ts, alpha, reg_lambda, w_r, x_data, eps=None):
+    if eps is None:
+        print("Not adding any noise on alpha")
+        return alpha
+    n = alpha.shape[0]
+    Delta = 3 / (n * reg_lambda)
+    dp_lambda = Delta / eps
 
-x_data = torch.cat((cls1_train_ts, cls2_train_ts), dim=0).to(device)
-y_data = torch.cat((cls1_label, cls2_label), dim=0).to(device)
+    laplace_sampler = Laplace(torch.tensor([0.0]), torch.tensor([dp_lambda]))
 
-n, d = x_data.shape
+    # for loop here
+    test_acc_list = []
+    train_acc_list = []
 
-# generate w_r
-w_r = torch.randn((m, d), dtype=torch.float32).to(device)
+    for i in tqdm(range(10)):
+      laplace_noise = laplace_sampler.sample((n, )).to(alpha.device)
+      laplace_noise = laplace_noise[..., 0]
+      # print(alpha.shape)
+      # print(laplace_noise.shape)
 
-h_dis = gen_h_dis(w_r, x_data)
+      wt_alpha = alpha + laplace_noise
 
-alpha = gen_alpha(h_dis, reg_lambda, y_data)
+      cls1_accuracy = test_accuracy(cls1_test_ts, 1, w_r, x_data, wt_alpha)
+      cls2_accuracy = test_accuracy(cls2_test_ts, -1, w_r, x_data, wt_alpha)
 
-# may scale down alpha here
-alpha = alpha / (n * n)
+      cls1_train_acc = test_accuracy(cls1_train_ts, 1, w_r, x_data, wt_alpha)
+      cls2_train_acc = test_accuracy(cls2_train_ts, -1, w_r, x_data, wt_alpha)
 
-cls1_accuracy = test_accuracy(cls1_test_ts, 1, w_r, x_data, alpha)
-cls2_accuracy = test_accuracy(cls2_test_ts, -1, w_r, x_data, alpha)
+      test_acc_list.append((cls1_accuracy + cls2_accuracy) / 2)
+      train_acc_list.append((cls1_train_acc + cls2_train_acc) / 2)
 
-cls1_train_acc = test_accuracy(cls1_train_ts, 1, w_r, x_data, alpha)
-cls2_train_acc = test_accuracy(cls2_train_ts, -1, w_r, x_data, alpha)
+    final_test_acc = sum(test_acc_list) / len(test_acc_list)
+    final_train_acc = sum(train_acc_list) / len(train_acc_list)
 
-final_accuracy = (cls1_accuracy + cls2_accuracy) / 2
-
-print("cls1 test acc", cls1_accuracy)
-print("cls2 test acc", cls2_accuracy)
-print("final test acc", final_accuracy)
-
-print("cls1 train acc", cls1_train_acc)
-print("cls2 train acc", cls2_train_acc)
-
-
-
-# ############### sanity check part 1 start ################
-# sanity_pred = process_query(cls1_train_ts, w_r, x_data, alpha)
-# succ_cnt = torch.sum(sanity_pred == 1)
-# nz = sanity_pred.shape[0]
-# accuracy = succ_cnt / nz
-# print("accuracy", accuracy)
-# breakpoint()
-# ############### sanity check part 1 end ################
-
-############# test on NTK Regression end #################
+    return final_test_acc, final_train_acc
 
 
+    # return wt_alpha
 
-# breakpoint()
-# print()
+
+if __name__ == "__main__":
+
+    # there are 5k images for 1 class
+    train_num = 1000
+    test_num = 100
+    label_scale = 100.0
+
+    cls1_name = "airplane"
+    cls2_name = "cat"
+
+    cls1_indices, cls2_indices = gen_2classes_indices(cls1_name, cls2_name)
+
+    cls1_train_ts = gen_feature_tensor(cls1_indices[:train_num]).to(device)
+    cls2_train_ts = gen_feature_tensor(cls2_indices[:train_num]).to(device)
+
+    cls1_label = torch.full((train_num, ), label_scale, dtype=torch.float32)
+    cls2_label = torch.full((train_num, ), -1 * label_scale, dtype=torch.float32)
+
+    cls1_test_ts = gen_feature_tensor(cls1_indices[-test_num:]).to(device)
+    cls2_test_ts = gen_feature_tensor(cls2_indices[-test_num:]).to(device)
+
+
+    ############# test on NTK Regression start #################
+
+    m = 256
+    reg_lambda = 10.0
+
+    x_data = torch.cat((cls1_train_ts, cls2_train_ts), dim=0).to(device)
+    y_data = torch.cat((cls1_label, cls2_label), dim=0).to(device)
+
+    n, d = x_data.shape
+
+    # generate w_r
+    w_r = torch.randn((m, d), dtype=torch.float32).to(device)
+
+    h_dis = gen_h_dis(w_r, x_data)
+
+    alpha = gen_alpha(h_dis, reg_lambda, y_data)
+
+    # may scale down alpha here
+    alpha = alpha / (n * n)
+
+    eps = 1e10
+
+    # add lapalce nosie on alpha
+    wt_alpha = add_laplace_on_alpha(alpha, reg_lambda, eps)
+
+    cls1_accuracy = test_accuracy(cls1_test_ts, 1, w_r, x_data, wt_alpha)
+    cls2_accuracy = test_accuracy(cls2_test_ts, -1, w_r, x_data, wt_alpha)
+
+    cls1_train_acc = test_accuracy(cls1_train_ts, 1, w_r, x_data, wt_alpha)
+    cls2_train_acc = test_accuracy(cls2_train_ts, -1, w_r, x_data, wt_alpha)
+
+    final_accuracy = (cls1_accuracy + cls2_accuracy) / 2
+
+    print("cls1 test acc", cls1_accuracy)
+    print("cls2 test acc", cls2_accuracy)
+    print("final test acc", final_accuracy)
+
+    print("cls1 train acc", cls1_train_acc)
+    print("cls2 train acc", cls2_train_acc)
+
 
 
 
