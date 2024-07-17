@@ -16,13 +16,11 @@ pip install -r requirements.txt
 ```
 
 ## 2 Run DP NTK Regression on CIFAR10
-Please refer to `run_gaussian_smapling_cal_k.ipynb`, 
+Please refer to `run_dp_ntk_regression.ipynb`, 
 
 where `ntk_utils.py` contains some useful function for computing $H^{\mathrm{dis}}$ and $\alpha$ in NTK Regression. 
 
-and `gen_data.py` contains code for generating multi-Gaussian Random Variables, which is used as sanity check for NTK Regression Implimentation.
-
-After you run block by block in `run_gaussian_smapling_cal_k.ipynb`, you will find the last block is 
+After you run block by block in `run_dp_ntk_regression.ipynb`, you will find the last block is 
 ``` python
 # you need to copy the output to gaussian_draw.ipynb to draw the figures.
 print(eps_exponent_list)
@@ -32,12 +30,12 @@ print(draw_train_acc_list)
 
 When you run this block, you can get sth like the following
 ```
-[-0.5, -0.4, -0.3, -0.19999999999999996, -0.09999999999999998, 0.0, 0.10000000000000009, 0.20000000000000007, 0.30000000000000004, 0.4, 0.5]
+[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 [0.7705000638961792, 0.8830000162124634, 0.8434999585151672, 0.9180000424385071, 0.9084998965263367, 0.9545000195503235, 0.9790000319480896, 0.9689998626708984, 0.9794999957084656, 0.9805000424385071, 0.981499969959259]
 [0.7839500308036804, 0.8832500576972961, 0.8475000262260437, 0.9182001352310181, 0.9191500544548035, 0.9565500617027283, 0.9762499928474426, 0.9739500284194946, 0.9793000221252441, 0.9796000719070435, 0.9799000024795532]
 ```
 
-where the first row denotes the eps's exponent. For example, the first entry -0.5 means we run DP NTK Regression with eps = $10^{-0.5}$
+where the first row denotes the eps's exponent. For example, the first entry 0.5 means we run DP NTK Regression with eps = $10^{0.5}$
 
 the seconde row denotes the private test acc on CIFAT10 two classes classification task. 
 
@@ -45,16 +43,16 @@ the thirds row denotes the private train acc on CIFAT10 two classes classificati
 
 ## 3 Draw Figures
 
-Please refer to `gaussian_draw.ipynb`, 
+Please refer to `draw_figs.ipynb`, 
 
-You should find sth like this in `gaussian_draw.ipynb`
+You should find the following code block in `draw_figs.ipynb`
 ``` python
-x_data = [-0.5, -0.4, -0.3, -0.19999999999999996, -0.09999999999999998, 0.0, 0.10000000000000009, 0.20000000000000007, 0.30000000000000004, 0.4, 0.5]
+x_data = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 test_acc_list = [0.7705000638961792, 0.8025, 0.8630, 0.9180000424385071, 0.9084998965263367, 0.9545000195503235, 0.9790000319480896, 0.9689998626708984, 0.9794999957084656, 0.9805000424385071, 0.981499969959259]
 train_acc_list = [0.7839500308036804, 0.8103, 0.8726, 0.9182001352310181, 0.9191500544548035, 0.9565500617027283, 0.9762499928474426, 0.9739500284194946, 0.9793000221252441, 0.9796000719070435, 0.9799000024795532]
 
 ```
 
-You should substitue your `eps_eponent_list`, `test_acc_list`, and `train_acc_list` to the above. Then run the block, you can get the figure.
+You should substitue the `x_data`, `test_acc_list` and `train_acc_list` with `eps_eponent_list`, `test_acc_list`, and `train_acc_list`, respectively. Then run the block, you can get the figure.
 
 

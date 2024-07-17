@@ -1,7 +1,5 @@
 import torch
 
-from gen_data import gen_random_multi_gaussian, gen_sanitiy_check_data
-
 def gen_h_dis(w_r, x_data):
     # h^{dis}_{ij} = 1/m sum_r^m <<w_r, x_i> x_i, <w_r, x_j> x_j>
     # h^{dis}_{ij} = <x_i, x_j> 1/m sum_r^m <w_r, x_i> <w_r, x_j>
@@ -121,76 +119,6 @@ def process_query(z, w_r, x_data, alpha):
     query_pred[query_pred < 0] = -1
 
     return query_pred
-
-
-if __name__ == "__main__":
-
-    m = 256
-    reg_lambda = 10.0
-
-    positive_data, negative_data = gen_sanitiy_check_data()
-
-    # gen label here
-    n, d = positive_data.shape
-
-    # generate w_r
-    w_r = torch.randn((m, d), dtype=torch.float32)
-    
-    label_scale = 100.0
-
-    positive_label = torch.full((n, ), label_scale, dtype=torch.float32)
-    negative_label = torch.full((n, ), -label_scale, dtype=torch.float32)
-
-    # concate them
-    # x_data: 100 * d
-    x_data = torch.cat((positive_data, negative_data), dim=0)
-
-    # 100 * 1
-    y_data = torch.cat((positive_label, negative_label), dim=0)
-
-    # 100 * 100
-    h_dis = gen_h_dis(w_r, x_data)
-
-    alpha = gen_alpha(h_dis, reg_lambda, y_data)
-
-
-    test_positive_data, test_negative_data = gen_sanitiy_check_data()
-
-    # ############### sanity check part 1 start ################
-    # sanity_pred = process_query(positive_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == 1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 1 end ################
-
-    # ############### sanity check part 1 start ################
-    # sanity_pred = process_query(negative_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == -1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 1 end ################
-
-    # ############### sanity check part 2 start ################
-    # sanity_pred = process_query(test_positive_data, w_r, x_data, alpha)
-    # succ_cnt = torch.sum(sanity_pred == 1)
-    # nz = sanity_pred.shape[0]
-    # ############### sanity check part 2 end #################
-
-    ############### sanity check part 3 start ################
-    sanity_pred = process_query(test_negative_data, w_r, x_data, alpha)
-    succ_cnt = torch.sum(sanity_pred == -1)
-    nz = sanity_pred.shape[0]
-    ############### sanity check part 3 end ################
-
-    accuracy = succ_cnt / nz
-
-    # print(sanity_pred)
-    print("succ cnt", succ_cnt)
-    print("total cnt", nz)
-    print("accuracy", accuracy)
-
-    # breakpoint()
-    # print()
-
-
 
 
 
