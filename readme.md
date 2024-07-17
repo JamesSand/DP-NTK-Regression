@@ -55,6 +55,15 @@ train_acc_list = [0.7839500308036804, 0.8103, 0.8726, 0.9182001352310181, 0.9191
 
 You should substitue the `x_data`, `test_acc_list` and `train_acc_list` with `eps_eponent_list`, `test_acc_list`, and `train_acc_list`, respectively. Then run the block, you can get the figure.
 
-![](ntk_figs/gaussian_mechanism_accuracy.png)
+<!-- <div align=center>
+
+![gaussian mechanism accuracy](ntk_figs/gaussian_mechanism_accuracy.png)
+
+<\div> -->
+
+<div align=center><img src="ntk_figs/gaussian_mechanism_accuracy.png"></div>
+
+
+<!-- ![](ntk_figs/gaussian_mechanism_accuracy.png) -->
 
 
