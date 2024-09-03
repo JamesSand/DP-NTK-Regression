@@ -16,11 +16,17 @@ pip install -r requirements.txt
 ```
 
 ## 2 Run DP NTK Regression on CIFAR10
-Please refer to `run_dp_ntk_regression.ipynb`, 
 
-where `ntk_utils.py` contains some useful function for computing $H^{\mathrm{dis}}$ and $\alpha$ in NTK Regression. 
 
-After you run block by block in `run_dp_ntk_regression.ipynb`, you will find the last block is 
+If you want to run the two-class classification task, please refer to `run_dp_ntk_regression_2_cls.ipynb`.
+
+If you want to run the ten-class classifciation task, please refer to `run_dp_ntk_regression_10_cls.ipynb`.  
+
+Here are some information for other python sciprts.
+- `ntk_utils.py` contains some useful function for computing $H^{\mathrm{dis}}$ and $\alpha$ in NTK Regression. 
+- `truncated_laplace_utils.py` contains some useful functions for generating the truncate Laplace noise. 
+
+<!-- After you run block by block in `run_dp_ntk_regression.ipynb`, you will find the last block is 
 ``` python
 # you need to copy the output to gaussian_draw.ipynb to draw the figures.
 print(eps_exponent_list)
@@ -39,13 +45,15 @@ where the first row denotes the eps's exponent. For example, the first entry 0.5
 
 the seconde row denotes the private test acc on CIFAT10 two classes classification task. 
 
-the thirds row denotes the private train acc on CIFAT10 two classes classification task. 
+the thirds row denotes the private train acc on CIFAT10 two classes classification task.  -->
 
 ## 3 Draw Figures
 
-Please refer to `draw_figs.ipynb`, 
+Please refer to `draw_figs_2_cls.ipynb` for drawing figures for the two-class classification task.
 
-You should find the following code block in `draw_figs.ipynb`
+Please refer to `draw_figs_10_cls.ipynb` for drawing figures for the ten-class classification task.
+
+You should find the following code block in `draw_figs_*_cls.ipynb`
 ``` python
 x_data = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 test_acc_list = [0.7705000638961792, 0.8025, 0.8630, 0.9180000424385071, 0.9084998965263367, 0.9545000195503235, 0.9790000319480896, 0.9689998626708984, 0.9794999957084656, 0.9805000424385071, 0.981499969959259]
@@ -55,14 +63,16 @@ train_acc_list = [0.7839500308036804, 0.8103, 0.8726, 0.9182001352310181, 0.9191
 
 You should substitue the `x_data`, `test_acc_list` and `train_acc_list` with `eps_eponent_list`, `test_acc_list`, and `train_acc_list`, respectively. Then run the block, you can get the figure.
 
-<!-- <div align=center>
+## 4 Results
 
-![gaussian mechanism accuracy](ntk_figs/gaussian_mechanism_accuracy.png)
-
-<\div> -->
+The following figure is the result on the two-class classification task. 
 
 <div align=center><img src="ntk_figs/gaussian_mechanism_accuracy.png"></div>
 
+
+The following figure is the result on the ten-class classification task. 
+
+<div align=center><img src="ntk_figs/ntk_regression.png"></div>
 
 <!-- ![](ntk_figs/gaussian_mechanism_accuracy.png) -->
 
