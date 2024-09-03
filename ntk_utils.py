@@ -101,8 +101,9 @@ def gen_z_embed(z, x_data, w_r):
 
     return z_embed
 
-
+# Process query for 2 classes case
 def process_query(z, w_r, x_data, alpha):
+    # z denote the query, nz denote the query num
     # z: nz * d
     # w_r: m * d
     # x_data: n * d
@@ -121,7 +122,30 @@ def process_query(z, w_r, x_data, alpha):
     return query_pred
 
 
+# Process quey for 10 classes case
+def process_10_cls_query(z, w_r, x_data, alpha):
+    # z denote the query, nz denote the query num
+    # z: nz * d
+    # w_r: m * d
+    # x_data: n * d
+    # alpha: n * 10
+    # return: pred: nz * 1
 
+    # nz * n
+    query_embed = gen_z_embed(z, x_data, w_r)
+
+    # nz * 10
+    query_pred = query_embed @ alpha
+
+    query_result = torch.argmax(query_pred, dim=1)
+
+    # nz * 1
+    return query_result
+
+    # query_pred[query_pred >= 0] = 1
+    # query_pred[query_pred < 0] = -1
+
+    # return query_pred
 
 
 
